@@ -106,7 +106,7 @@
                 }
             });
 
-            $('#view-graph-button').click(function() {
+            function updateGraph() {
                 $.ajax({
                     url: '/network_data',
                     method: 'GET',
@@ -124,12 +124,46 @@
                             },
                             edges: {
                                 width: 2
+                            },
+                            interaction: {
+                                hover: true
+                            },
+                            physics: {
+                                stabilization: false,
+                                barnesHut: {
+                                    gravitationalConstant: -80000,
+                                    springConstant: 0.001,
+                                    springLength: 200
+                                }
                             }
                         };
+
+                        if (network !== null) {
+                            network.destroy();
+                        }
                         network = new vis.Network(container, data, options);
+
+                        network.on("hoverNode", function (params) {
+                            var node = data.nodes.find(n => n.id === params.node);
+                            var hoverInfo = "Full text: " + node.title + "\n\nTop 5 similarities:";
+                            node.top_similarities.forEach(function(sim) {
+                                var simNode = data.nodes.find(n => n.id === sim.id);
+                                hoverInfo += "\n" + simNode.label + ": " + sim.similarity.toFixed(2);
+                                if (sim.is_connected) {
+                                    hoverInfo += " (connected)";
+                                }
+                            });
+                            network.setTitle(hoverInfo);
+                        });
+
+                        network.on("blurNode", function (params) {
+                            network.setTitle();
+                        });
                     }
                 });
-            });
+            }
+
+            $('#view-graph-button').click(updateGraph);
 
             $('#clear-knowledge-graph-button').click(function() {
                 $.ajax({

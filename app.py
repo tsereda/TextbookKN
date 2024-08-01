@@ -68,6 +68,18 @@ def get_segments_and_embeddings():
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
+def numpy_to_python(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    else:
+        return obj
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -94,18 +106,43 @@ def process_markdown():
 def network_data():
     segments, embeddings = get_segments_and_embeddings()
     
-    nodes = [{'id': seg['id'], 'label': seg['text'][:50]} for seg in segments]
+    nodes = []
     edges = []
     
-    for i in range(len(segments)):
-        for j in range(i+1, len(segments)):
-            similarity = cosine_similarity(embeddings[i], embeddings[j])
-            if similarity > 0.7:  # You can adjust this threshold
-                edges.append({
-                    'from': segments[i]['id'],
-                    'to': segments[j]['id'],
-                    'value': float(similarity)
-                })
+    for i, seg in enumerate(segments):
+        similarities = []
+        for j, other_seg in enumerate(segments):
+            if i != j:
+                similarity = cosine_similarity(embeddings[i], embeddings[j])
+                similarities.append((j, similarity))
+        
+        # Sort similarities and get top 5 for hover info
+        top_similarities = sorted(similarities, key=lambda x: x[1], reverse=True)[:5]
+        
+        # Get the two most similar segments for edges
+        two_most_similar = sorted(similarities, key=lambda x: x[1], reverse=True)[:2]
+        
+        nodes.append({
+            'id': seg['id'],
+            'label': seg['text'][:50],
+            'title': seg['text'],  # Full text for hover
+            'top_similarities': [
+                {
+                    'id': segments[j]['id'], 
+                    'similarity': numpy_to_python(sim),
+                    'is_connected': idx < 2  # True for the two most similar
+                }
+                for idx, (j, sim) in enumerate(top_similarities)
+            ]
+        })
+        
+        # Add edges for the two most similar segments
+        for j, sim in two_most_similar:
+            edges.append({
+                'from': seg['id'],
+                'to': segments[j]['id'],
+                'value': numpy_to_python(sim)
+            })
     
     return jsonify({'nodes': nodes, 'edges': edges})
 
@@ -120,7 +157,7 @@ def clear_database():
     except Exception as e:
         logger.error(f"Error clearing database: {e}")
         return jsonify({'error': 'Error clearing database'}), 500
-    
+
 if __name__ == '__main__':
     init_db()
     app.run(debug=True)
